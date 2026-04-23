@@ -1,0 +1,7 @@
+langgraph
+pandas
+openpyxl
+streamlit
+plotly
+python-dotenv
+pydantic
