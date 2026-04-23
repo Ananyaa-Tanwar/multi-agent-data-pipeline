@@ -149,27 +149,6 @@ The system will:
 
 ---
 
-## Project Structure
-src/
-├── agents/
-│   ├── ingestion.py
-│   ├── cleaner.py
-│   ├── validator.py
-│   ├── relationship.py
-│   └── analyst.py
-├── core/
-│   ├── state.py
-│   ├── artifacts.py
-│   └── file_utils.py
-├── graph/
-│   └── pipeline_graph.py
-├── app/
-│   └── streamlit_app.py
-└── cli/
-└── run_pipeline.py
-
----
-
 ## Future Improvements
 
 - [ ] LLM-powered insights (natural language summaries)
