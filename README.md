@@ -1,6 +1,10 @@
 # Multi-Agent Data Analyst (LangGraph + Streamlit)
 
-An end-to-end **multi-agent data analysis system** that ingests multiple datasets, performs automated cleaning and validation, detects relationships across files, and generates interactive visual insights.
+🚀 **Try the app:** https://multi-agent-data-pipeline-ananyaa.streamlit.app/
+
+> Upload your own datasets and get automated cleaning, validation, and insights.
+
+An end-to-end multi-agent data analysis system that ingests multiple datasets, performs automated cleaning and validation, detects relationships across files, and generates interactive visual insights.
 
 Built using **LangGraph for orchestration** and **Streamlit for an interactive UI**.
 
