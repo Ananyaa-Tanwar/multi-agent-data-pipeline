@@ -2,9 +2,9 @@
 
 🚀 **Try the app:** https://multi-agent-data-pipeline-ananyaa.streamlit.app/
 
-> Upload your own datasets and get automated cleaning, validation, and insights.
+> Upload your datasets and get automated cleaning, validation, relationship detection, and AI-powered insights.
 
-An end-to-end multi-agent data analysis system that ingests multiple datasets, performs automated cleaning and validation, detects relationships across files, and generates interactive visual insights.
+An end-to-end **multi-agent data analysis system** that ingests multiple datasets, performs automated cleaning and validation, detects relationships across files, and generates both statistical and **LLM-powered insights**.
 
 Built using **LangGraph for orchestration** and **Streamlit for an interactive UI**.
 
@@ -12,47 +12,75 @@ Built using **LangGraph for orchestration** and **Streamlit for an interactive U
 
 ## Overview
 
-This project simulates how a data analyst would approach messy data, but automated through a **multi-agent pipeline**:
+This project simulates how a modern data analyst works — but fully automated through an **agentic pipeline**:
 
-- Ingest multiple files (CSV / Excel)
-- Clean and standardize datasets
+- Ingest multiple datasets (CSV / Excel)
+- Clean and standardize data
 - Validate data quality
 - Detect relationships across datasets
-- Generate statistical insights and charts
+- Perform cross-dataset analysis
+- Generate statistical + AI insights
 - Provide an interactive dashboard for exploration
 
 ---
 
 ## Architecture
 
-The system is built as a **LangGraph pipeline** with modular agents:
+The system is built as a **LangGraph multi-agent pipeline**:
+Ingestion → Cleaning → Validation → Schema Drift → Relationships → Analysis → LLM Insights
 
 
-### Agents
+---
 
-- **Ingestion Agent**
-  - Reads uploaded files
-  - Profiles schema (columns, types, counts)
+## Agents
 
-- **Cleaning Agent**
-  - Standardizes column names
-  - Removes duplicates
-  - Outputs cleaned datasets
+### Ingestion Agent
+- Reads uploaded files
+- Profiles schema (columns, counts, types)
+- Initializes pipeline state
 
-- **Validation Agent**
-  - Checks for empty datasets
-  - Flags high missing values
-  - Produces validation report
+### Cleaning Agent
+- Standardizes column names
+- Removes duplicates
+- Outputs cleaned datasets
+- Logs transformations
 
-- **Relationship Agent**
-  - Detects shared columns across files
-  - Suggests join keys
-  - Generates join previews
+### Validation Agent
+- Detects empty datasets
+- Flags high missing values
+- Produces validation reports
+- Controls retry logic in the graph
 
-- **Analysis Agent**
-  - Computes summary statistics
-  - Generates charts (histograms, bar charts, correlation heatmaps)
-  - Produces human-readable insights
+### Schema Drift Agent
+- Compares schemas across files
+- Detects structural differences between datasets
+- Runs in pipeline (not surfaced in UI)
+
+### Relationship Agent
+- Identifies shared columns across datasets
+- Suggests optimal join keys
+- Executes full joins (not just previews)
+- Generates cross-dataset insights (correlation + distribution patterns)
+
+### Analysis Agent
+- Computes summary statistics
+- Generates charts:
+  - Histograms
+  - Bar charts
+  - Scatter plots
+  - Box plots
+  - Line charts
+  - Correlation heatmaps
+- Produces rule-based insights
+
+### LLM Insights Agent
+- Uses GPT-4o-mini to generate structured insights
+- Returns JSON output with:
+  - Summary
+  - Key findings
+  - Data quality observations
+  - Recommended next steps
+  - Watch-outs
 
 ---
 
@@ -60,7 +88,7 @@ The system is built as a **LangGraph pipeline** with modular agents:
 
 ### Multi-file Analysis
 - Upload **1–5 CSV or Excel files**
-- Each file processed independently and jointly
+- Analyze datasets independently and jointly
 
 ### Data Quality Reporting
 - Missing value detection
@@ -68,19 +96,20 @@ The system is built as a **LangGraph pipeline** with modular agents:
 - Validation pass/fail status
 
 ### Relationship Detection
-- Identifies shared columns across datasets
-- Suggests join keys
-- Generates join previews
+- Automatic join key detection
+- Full dataset joins
+- Cross-dataset insights
 
 ### Interactive Visualization
-- Histogram, bar chart, scatter, box plot, line chart
-- Correlation heatmaps (when applicable)
-- Dynamic chart builder (user selects columns and chart types)
+- Dynamic chart builder
+- Multiple chart types
+- AI-suggested visualizations
+- Correlation heatmaps
 
-### Insights Generation
-- Summary statistics
-- Key column-level insights
-- Relationship insights between datasets
+### AI Insights
+- LLM-generated structured insights
+- Context-aware recommendations
+- Dataset-agnostic analysis
 
 ### Downloads
 - Cleaned datasets
@@ -92,19 +121,22 @@ The system is built as a **LangGraph pipeline** with modular agents:
 ## Tech Stack
 
 - **Python**
-- **LangGraph** (multi-agent orchestration)
+- **LangGraph** (agent orchestration)
 - **Streamlit** (frontend UI)
 - **Pandas** (data processing)
-- **Plotly** (interactive visualizations)
-- **Pydantic** (structured state management)
+- **Plotly** (interactive charts)
+- **Pydantic** (state management)
+- **OpenAI API** (LLM insights)
+- **python-dotenv** (env management)
 
 ---
 
 ## Installation
 
 Clone the repository:
+
 ```bash
-git clone https://github.com/your-username/multi-agent-data-pipeline.git
+git clone https://github.com/Ananyaa-Tanwar/multi-agent-data-pipeline.git
 cd multi-agent-data-pipeline
 ```
 
@@ -139,36 +171,44 @@ Upload 1–5 CSV or Excel files and click **Run analysis**.
 
 ## Example Use Case
 
-Upload:
-- `orders.csv`
-- `customers.csv`
+Upload the included sample dataset (US Candy Distributor) or any combination of related CSVs:
 
-The system will:
-- Detect `customer_id` as a shared key
-- Suggest a join between datasets
-- Generate insights such as:
-  - Order distribution
-  - Customer frequency
-  - Relationships between numeric variables
+- `Candy_Sales.csv` — 10,000+ transaction records with product, customer, and revenue data
+- `Candy_Products.csv` — product catalog with factory assignments and pricing
+- `Candy_Factories.csv` — factory locations with lat/long coordinates
+- `Candy_Targets.csv` — division-level sales targets
+
+The pipeline will automatically:
+- Clean and standardize all four files
+- Detect `Product ID` and `Division` as shared keys across files
+- Execute inner joins and run cross-dataset correlation analysis
+- Generate statistical insights per file and across the merged dataset
+- Deliver an AI-written summary with specific findings, data quality flags, recommended next steps, and risks to watch
 
 ---
 
-## Future Improvements
+## What Was Built
 
-- [ ] LLM-powered insights (natural language summaries)
-- [ ] Automated join execution + cross-dataset analysis
-- [ ] Advanced validation rules (schema + constraints)
-- [ ] Time-series detection and forecasting
-- [ ] Data lineage visualization
-- [ ] LangSmith tracing integration
+| Capability | Detail |
+|---|---|
+| Agentic orchestration | Six-node LangGraph pipeline with conditional routing and retry logic on validation failure |
+| Data cleaning | Snake_case normalization, duplicate removal, whitespace stripping — fully logged per file |
+| Validation | Missing value detection, empty dataset checks, error vs. warning severity levels |
+| Relationship detection | Shared column detection across all file pairs, automated inner join execution, cross-dataset analysis |
+| Statistical analysis | Per-column summaries, distribution charts, correlation heatmaps, AI-suggested visualizations |
+| LLM insights | GPT-4o-mini generates structured findings, data quality observations, next steps, and risk flags |
+| LangSmith tracing | Full pipeline observability via environment variable configuration |
+| Interactive UI | Streamlit app with dynamic chart builder, downloadable outputs, and one-click sample data loading |
 
 ---
 
 ## Why This Project Matters
 
-This project demonstrates:
+Most data pipelines are either rigid ETL scripts or black-box notebooks. This project demonstrates a third pattern: a **modular, agentic pipeline** where each processing step is an independent agent with a defined input/output contract, orchestrated by a state graph rather than hardcoded control flow.
 
-- Building agentic workflows using **LangGraph**
-- Combining deterministic data processing with modular agents
-- Designing interactive data applications
-- Structuring code for scalability and extensibility
+Practically, this means:
+- New agents can be added without touching existing ones
+- Conditional routing (retry on validation failure, skip on error) is declarative not imperative
+- The same architecture scales from five-file CSV analysis to production data workflows
+
+Built with **LangGraph**, **Streamlit**, **Pandas**, **Plotly**, and the **OpenAI API**.
