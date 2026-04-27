@@ -29,6 +29,16 @@ class ValidationReport(BaseModel):
     issues: List[ValidationIssue] = Field(default_factory=list)
 
 
+class SchemaDriftResult(BaseModel):
+    file_a: str
+    file_b: str
+    status: str  # identical_schema | schema_drift_detected
+    only_in_a: List[str] = Field(default_factory=list)
+    only_in_b: List[str] = Field(default_factory=list)
+    shared_columns: List[str] = Field(default_factory=list)
+    summary: str = ""
+
+
 class PipelineState(BaseModel):
     run_id: str
     run_dir: Path
@@ -41,6 +51,10 @@ class PipelineState(BaseModel):
     cleaning_logs: Dict[str, Any] = Field(default_factory=dict)
     analysis_results: Dict[str, Any] = Field(default_factory=dict)
     relationship_results: Dict[str, Any] = Field(default_factory=dict)
+
+    # New fields
+    schema_drift_results: List[SchemaDriftResult] = Field(default_factory=list)
+    llm_insights: str = ""
 
     retry_count: int = 0
     max_retries: int = 1

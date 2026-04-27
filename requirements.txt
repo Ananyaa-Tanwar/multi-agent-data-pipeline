@@ -1,7 +1,9 @@
-langgraph
-pandas
-openpyxl
-streamlit
-plotly
-python-dotenv
-pydantic
+langgraph>=0.2.0
+streamlit>=1.35.0
+pandas>=2.0.0
+plotly>=5.20.0
+pydantic>=2.0.0
+openai>=1.30.0
+python-dotenv>=1.0.0
+numpy>=1.26.0
+openpyxl>=3.1.0

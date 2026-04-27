@@ -1,7 +1,24 @@
-__pycache__/
 *.pyc
-.venv/
-.env
-runs/
 data/
+
+# Environment variables — NEVER commit this
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Pipeline run outputs
+runs/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
 .DS_Store
+Thumbs.db
