@@ -1081,7 +1081,7 @@ if "pipeline_result" in st.session_state:
 st.markdown("""
 <div class="footer">
     <div class="footer-left">
-        Built by <a href="https://ananyaatanwar.com" target="_blank">Ananyaa Tanwar</a>
+        Built by <a href="https://ananyaa-tanwar.github.io/" target="_blank">Ananyaa Tanwar</a>
         &nbsp;·&nbsp; MS Information Management, UIUC
         &nbsp;·&nbsp; Data Engineering &amp; Analytics
     </div>
