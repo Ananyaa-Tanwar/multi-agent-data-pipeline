@@ -120,6 +120,36 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; color: #1c1c1c;
 .chart-builder-callout-text { font-size:0.84rem; color:#3d3d3d; }
 .chart-builder-callout-text strong { color:#1c1c1c; }
 
+/* ── Ask anything ── */
+.ask-input-wrap { margin-bottom: 0.6rem; }
+.ask-result-answer {
+    background: #ffffff;
+    border: 1px solid #e8e5df;
+    border-left: 3px solid #3d3d3d;
+    border-radius: 0 6px 6px 0;
+    padding: 1rem 1.3rem;
+    font-size: 0.86rem;
+    line-height: 1.75;
+    color: #2a2a2a;
+    margin-bottom: 1rem;
+}
+.ask-example {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    color: #888888;
+    margin-bottom: 0.8rem;
+    line-height: 1.8;
+}
+.ask-error {
+    background: #fdf3f3;
+    border: 1px solid #e8c4c4;
+    border-radius: 6px;
+    padding: 0.65rem 1rem;
+    font-size: 0.81rem;
+    color: #8b3030;
+    margin-bottom: 0.8rem;
+}
+
 /* ── AI chart suggestion ── */
 .ai-chart-suggestion { background:#fafaf8; border:1px solid #e8e5df; border-radius:6px; padding:0.8rem 1rem; margin-bottom:1rem; font-size:0.81rem; color:#555555; line-height:1.5; }
 .ai-chart-suggestion strong { color:#1c1c1c; }
@@ -346,6 +376,130 @@ def render_suggested_chart(df: pd.DataFrame, suggestion: dict):
         st.plotly_chart(styled_plotly(fig), use_container_width=True, theme=None, key=f"sug_{id(fig)}")
     except Exception as e:
         st.caption(f"Could not render chart: {e}")
+
+
+
+def ask_data_question(df: pd.DataFrame, question: str, file_name: str) -> dict:
+    """
+    Send a natural language question about a dataframe to GPT-4o-mini.
+    Returns dict with keys: answer, chart (optional plotly fig), error.
+    """
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return {"error": "OPENAI_API_KEY not set."}
+
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+
+        schema = {
+            "file": file_name,
+            "rows": len(df),
+            "columns": {
+                col: {
+                    "dtype": str(df[col].dtype),
+                    "sample": df[col].dropna().head(3).tolist(),
+                    "nunique": int(df[col].nunique()),
+                }
+                for col in df.columns
+            }
+        }
+
+        prompt = f"""You are a data analyst. A user is asking a question about a dataset.
+Your job is to answer it by writing a single Pandas expression and providing a plain-English answer.
+
+Dataset schema:
+{json.dumps(schema, indent=2)}
+
+User question: {question}
+
+Return ONLY a JSON object with these keys:
+{{
+  "answer": "Plain-English answer in 1-3 sentences. Be specific — use actual numbers, column names, values from the data.",
+  "pandas_expr": "A single Python expression using the variable `df` that computes the answer. Must be a valid expression that returns a value, Series, or DataFrame. No assignments, no multi-line code.",
+  "chart_type": "bar" | "line" | "histogram" | "scatter" | null,
+  "chart_x": "column name or null",
+  "chart_y": "column name or null",
+  "chart_color": "column name or null"
+}}
+
+Rules:
+- pandas_expr must be a single expression, not a statement. Use .head(20) if it might return many rows.
+- Only reference columns that actually exist in the schema above.
+- If the question cannot be answered from this data, set pandas_expr to null and explain in answer.
+- chart_type should be null if a table or scalar answer is more appropriate than a chart.
+- Do not use f-strings or complex lambdas in pandas_expr.
+"""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=500,
+        )
+
+        raw = response.choices[0].message.content.strip()
+        data = json.loads(raw)
+
+        result = {"answer": data.get("answer", ""), "chart": None, "error": None, "table": None}
+
+        expr = data.get("pandas_expr")
+        if expr:
+            try:
+                computed = eval(expr, {"df": df, "pd": pd})
+                if isinstance(computed, pd.DataFrame):
+                    result["table"] = computed.head(20)
+                elif isinstance(computed, pd.Series):
+                    result["table"] = computed.reset_index().head(20)
+                else:
+                    # scalar — fold into answer
+                    result["answer"] = result["answer"] + f" (computed: {computed})"
+            except Exception as e:
+                result["error"] = f"Could not execute expression: {e}"
+
+        # Build chart if requested
+        chart_type = data.get("chart_type")
+        cx = data.get("chart_x")
+        cy = data.get("chart_y")
+        cc = data.get("chart_color")
+
+        if chart_type and cx and cx in df.columns:
+            try:
+                if chart_type == "bar" and cy and cy in df.columns:
+                    fig = px.bar(df.groupby(cx)[cy].sum().reset_index().sort_values(cy, ascending=False).head(20),
+                                 x=cx, y=cy, title=f"{cy} by {cx}", color_discrete_sequence=["#2C4A6E"])
+                    result["chart"] = fig
+                elif chart_type == "bar":
+                    counts = df[cx].value_counts().head(20).reset_index()
+                    counts.columns = [cx, "count"]
+                    fig = px.bar(counts, x=cx, y="count", title=f"Top values: {cx}", color_discrete_sequence=["#2C4A6E"])
+                    result["chart"] = fig
+                elif chart_type == "line" and cy and cy in df.columns:
+                    temp = df[[cx, cy]].dropna().copy()
+                    try:
+                        temp[cx] = pd.to_datetime(temp[cx])
+                        temp = temp.sort_values(cx)
+                    except Exception:
+                        pass
+                    fig = px.line(temp, x=cx, y=cy, title=f"{cy} over {cx}", markers=True, color_discrete_sequence=["#2C4A6E"])
+                    result["chart"] = fig
+                elif chart_type == "histogram":
+                    fig = px.histogram(df, x=cx, title=f"Distribution: {cx}", color_discrete_sequence=["#2C4A6E"])
+                    result["chart"] = fig
+                elif chart_type == "scatter" and cy and cy in df.columns:
+                    fig = px.scatter(df, x=cx, y=cy,
+                                     color=cc if cc and cc in df.columns else None,
+                                     title=f"{cy} vs {cx}")
+                    result["chart"] = fig
+            except Exception:
+                pass  # chart is optional, don't fail
+
+        return result
+
+    except json.JSONDecodeError:
+        return {"error": "GPT returned an unexpected response. Try rephrasing your question.", "answer": "", "chart": None, "table": None}
+    except Exception as e:
+        return {"error": str(e), "answer": "", "chart": None, "table": None}
 
 
 # ── Hero ───────────────────────────────────────────────────────────────────────
@@ -737,6 +891,43 @@ if "pipeline_result" in st.session_state:
                 section("Data Preview")
                 st.dataframe(df.head(20), use_container_width=True, height=260)
 
+                # ── Ask anything ─────────────────────────────────────────────
+                section("Ask a Question")
+                st.markdown(
+                    '<div class="ask-example">Try: "Which product has the highest gross profit?" &nbsp;·&nbsp; '
+                    '"Show sales by region" &nbsp;·&nbsp; "What is the average order value?" &nbsp;·&nbsp; '
+                    '"Is there a trend in order date vs sales?"</div>',
+                    unsafe_allow_html=True,
+                )
+
+                ask_col, ask_btn_col = st.columns([5, 1])
+                with ask_col:
+                    user_question = st.text_input(
+                        "Question",
+                        placeholder="Ask anything about this dataset…",
+                        label_visibility="collapsed",
+                        key=f"ask_input_{selected_name}",
+                    )
+                with ask_btn_col:
+                    ask_run = st.button("Ask", use_container_width=True, key=f"ask_btn_{selected_name}")
+
+                if ask_run and user_question.strip():
+                    with st.spinner("Thinking…"):
+                        ask_result = ask_data_question(df, user_question.strip(), selected_name)
+                    st.session_state[f"ask_result_{selected_name}"] = ask_result
+
+                ask_result = st.session_state.get(f"ask_result_{selected_name}")
+                if ask_result:
+                    if ask_result.get("error"):
+                        st.markdown(f'<div class="ask-error">{ask_result["error"]}</div>', unsafe_allow_html=True)
+                    if ask_result.get("answer"):
+                        st.markdown(f'<div class="ask-result-answer">{ask_result["answer"]}</div>', unsafe_allow_html=True)
+                    if ask_result.get("table") is not None:
+                        st.dataframe(ask_result["table"], use_container_width=True)
+                    if ask_result.get("chart") is not None:
+                        st.plotly_chart(styled_plotly(ask_result["chart"]), use_container_width=True, theme=None,
+                                        key=f"ask_chart_{selected_name}_{user_question[:20]}")
+
                 # ── AI suggested charts ──────────────────────────────────────
                 section("AI-Suggested Charts")
                 cache_key = f"ai_charts_{selected_name}"
@@ -890,7 +1081,9 @@ if "pipeline_result" in st.session_state:
 st.markdown("""
 <div class="footer">
     <div class="footer-left">
-        Built by <a href="https://ananyaa-tanwar.github.io/" target="_blank">Ananyaa Tanwar</a>
+        Built by <a href="https://ananyaatanwar.com" target="_blank">Ananyaa Tanwar</a>
+        &nbsp;·&nbsp; MS Information Management, UIUC
+        &nbsp;·&nbsp; Data Engineering &amp; Analytics
     </div>
     <div class="footer-right">Multi-Agent Data Analyst · LangGraph + GPT-4o-mini</div>
 </div>

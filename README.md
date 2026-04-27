@@ -1,6 +1,6 @@
 # Multi-Agent Data Analyst (LangGraph + Streamlit)
 
-🚀 **Try the app:** https://multi-agent-data-pipeline-ananyaa.streamlit.app/
+**Try the app:** https://multi-agent-data-pipeline-ananyaa.streamlit.app/
 
 > Upload your datasets and get automated cleaning, validation, relationship detection, and AI-powered insights.
 
