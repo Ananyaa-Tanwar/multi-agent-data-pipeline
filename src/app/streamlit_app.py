@@ -16,8 +16,9 @@ import plotly.express as px
 import plotly.io as pio
 import streamlit as st
 from dotenv import load_dotenv
+from pathlib import Path as _Path
 
-load_dotenv()
+load_dotenv(dotenv_path=_Path(__file__).resolve().parents[2] / ".env", override=True)
 
 from src.core.artifacts import init_state
 from src.graph.pipeline_graph import build_graph
@@ -1082,8 +1083,6 @@ st.markdown("""
 <div class="footer">
     <div class="footer-left">
         Built by <a href="https://ananyaa-tanwar.github.io/" target="_blank">Ananyaa Tanwar</a>
-        &nbsp;·&nbsp; MS Information Management, UIUC
-        &nbsp;·&nbsp; Data Engineering &amp; Analytics
     </div>
     <div class="footer-right">Multi-Agent Data Analyst · LangGraph + GPT-4o-mini</div>
 </div>

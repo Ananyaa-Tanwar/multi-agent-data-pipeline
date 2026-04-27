@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env", override=True)
 
 from openai import OpenAI
 
