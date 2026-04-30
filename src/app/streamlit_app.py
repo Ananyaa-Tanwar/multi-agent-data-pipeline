@@ -957,97 +957,240 @@ if "pipeline_result" in st.session_state:
                     '<div class="chart-builder-callout">'
                     '<span style="font-size:1.1rem;">🔍</span>'
                     '<div class="chart-builder-callout-text">'
-                    '<strong>Your turn.</strong> Pick any column combination below to build your own chart. '
-                    'Use this to validate the AI suggestions or explore hypotheses of your own.'
+                    '<strong>Your turn.</strong> Build any chart using the controls below. '
+                    'Optional fields let you add a metric axis and a category breakdown for richer analysis.'
                     '</div></div>',
                     unsafe_allow_html=True,
                 )
 
-                chart_col, opts_col = st.columns([3, 1])
-                with opts_col:
+                # Smart metric detection: prefer columns with revenue/profit/amount/quantity/sales in the name
+                METRIC_KEYWORDS = ["revenue", "profit", "sales", "amount", "quantity", "qty",
+                                    "price", "cost", "total", "gross", "net", "units", "count", "value"]
+                def smart_default_metric(cols):
+                    for kw in METRIC_KEYWORDS:
+                        for c in cols:
+                            if kw in c.lower():
+                                return c
+                    return cols[0] if cols else None
+
+                # Layout: chart type on top row, then controls below
+                cb_type_col, _ = st.columns([1, 3])
+                with cb_type_col:
                     chart_type = st.selectbox("Chart type", [
                         "Bar Chart", "Histogram", "Scatter Plot",
                         "Box Plot", "Line Chart", "Correlation Heatmap",
-                    ])
+                    ], key=f"cb_type_{selected_name}")
 
-                with chart_col:
-                    if chart_type == "Histogram":
-                        if numeric_cols:
-                            with opts_col:
-                                x_col = st.selectbox("Column", numeric_cols)
-                            fig = px.histogram(df, x=x_col, title=f"Distribution: {x_col}", color_discrete_sequence=["#2C4A6E"])
-                            st.plotly_chart(styled_plotly(fig), use_container_width=True, theme=None, key=f"cb_hist_{selected_name}_{x_col}")
-                        else:
-                            st.warning("No numeric columns.")
+                st.markdown("<div style='margin-top:0.2rem;'></div>", unsafe_allow_html=True)
 
-                    elif chart_type == "Bar Chart":
-                        if categorical_cols:
-                            with opts_col:
-                                x_col = st.selectbox("Column", categorical_cols)
-                                top_n = st.slider("Top N", 5, 30, 10)
-                            counts = df[x_col].value_counts().head(top_n).reset_index()
-                            counts.columns = [x_col, "count"]
-                            fig = px.bar(counts, x=x_col, y="count", title=f"Top {top_n}: {x_col}", color_discrete_sequence=["#2C4A6E"])
-                            st.plotly_chart(styled_plotly(fig), use_container_width=True, theme=None, key=f"cb_bar_{selected_name}_{x_col}_{top_n}")
-                        else:
-                            st.warning("No categorical columns.")
+                # ── Bar Chart ────────────────────────────────────────────────
+                if chart_type == "Bar Chart":
+                    if not categorical_cols:
+                        st.warning("No categorical columns available.")
+                    else:
+                        default_metric = smart_default_metric(numeric_cols)
+                        c1, c2, c3, c4 = st.columns(4)
+                        with c1:
+                            x_col = st.selectbox("Category (X axis)", categorical_cols,
+                                                  key=f"bar_x_{selected_name}")
+                        with c2:
+                            y_options = ["Count"] + numeric_cols
+                            y_col = st.selectbox("Metric (Y axis)", y_options,
+                                                  index=y_options.index(default_metric) if default_metric in y_options else 0,
+                                                  key=f"bar_y_{selected_name}")
+                        with c3:
+                            breakdown = st.selectbox("Break down by (optional)",
+                                                      ["None"] + [c for c in categorical_cols if c != x_col],
+                                                      key=f"bar_bd_{selected_name}")
+                        with c4:
+                            agg_fn = st.selectbox("Aggregation", ["Sum", "Mean", "Median", "Max", "Min"],
+                                                   key=f"bar_agg_{selected_name}") if y_col != "Count" else st.selectbox("Aggregation", ["Count"], key=f"bar_agg2_{selected_name}")
+                            top_n = st.slider("Top N", 5, 30, 15, key=f"bar_topn_{selected_name}")
 
-                    elif chart_type == "Scatter Plot":
-                        if len(numeric_cols) >= 2:
-                            with opts_col:
-                                x_col = st.selectbox("X axis", numeric_cols)
-                                y_col = st.selectbox("Y axis", [c for c in numeric_cols if c != x_col])
-                                color_col = st.selectbox("Color by", ["None"] + categorical_cols)
+                        try:
+                            bd = None if breakdown == "None" else breakdown
+                            if y_col == "Count":
+                                if bd:
+                                    plot_df = df.groupby([x_col, bd]).size().reset_index(name="count")
+                                    plot_df = plot_df.groupby(x_col)["count"].sum().reset_index().sort_values("count", ascending=False).head(top_n)
+                                    # re-merge for breakdown
+                                    plot_df2 = df.groupby([x_col, bd]).size().reset_index(name="count")
+                                    top_cats = plot_df[x_col].tolist()
+                                    plot_df2 = plot_df2[plot_df2[x_col].isin(top_cats)]
+                                    fig = px.bar(plot_df2, x=x_col, y="count", color=bd,
+                                                 title=f"Count of {x_col} by {bd}", barmode="stack")
+                                else:
+                                    plot_df = df[x_col].value_counts().head(top_n).reset_index()
+                                    plot_df.columns = [x_col, "count"]
+                                    fig = px.bar(plot_df, x=x_col, y="count",
+                                                 title=f"Count by {x_col}",
+                                                 color_discrete_sequence=["#2C4A6E"])
+                            else:
+                                agg_map = {"Sum": "sum", "Mean": "mean", "Median": "median", "Max": "max", "Min": "min"}
+                                fn = agg_map[agg_fn]
+                                if bd:
+                                    plot_df = df.groupby([x_col, bd])[y_col].agg(fn).reset_index()
+                                    top_cats = df.groupby(x_col)[y_col].agg(fn).nlargest(top_n).index.tolist()
+                                    plot_df = plot_df[plot_df[x_col].isin(top_cats)]
+                                    fig = px.bar(plot_df, x=x_col, y=y_col, color=bd,
+                                                 title=f"{agg_fn} of {y_col} by {x_col}, broken down by {bd}",
+                                                 barmode="group")
+                                else:
+                                    plot_df = df.groupby(x_col)[y_col].agg(fn).reset_index().sort_values(y_col, ascending=False).head(top_n)
+                                    fig = px.bar(plot_df, x=x_col, y=y_col,
+                                                 title=f"{agg_fn} of {y_col} by {x_col}",
+                                                 color_discrete_sequence=["#2C4A6E"])
+                            st.plotly_chart(styled_plotly(fig), use_container_width=True, theme=None,
+                                            key=f"cb_bar_{selected_name}_{x_col}_{y_col}_{breakdown}_{agg_fn}_{top_n}")
+                        except Exception as e:
+                            st.warning(f"Could not render chart: {e}")
+
+                # ── Histogram ────────────────────────────────────────────────
+                elif chart_type == "Histogram":
+                    if not numeric_cols:
+                        st.warning("No numeric columns available.")
+                    else:
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            x_col = st.selectbox("Column", numeric_cols, key=f"hist_x_{selected_name}")
+                        with c2:
+                            breakdown = st.selectbox("Break down by (optional)", ["None"] + categorical_cols,
+                                                      key=f"hist_bd_{selected_name}")
+                        with c3:
+                            nbins = st.slider("Bins", 10, 100, 30, key=f"hist_bins_{selected_name}")
+                        try:
+                            bd = None if breakdown == "None" else breakdown
+                            fig = px.histogram(df, x=x_col, color=bd, nbins=nbins,
+                                               title=f"Distribution: {x_col}" + (f" by {bd}" if bd else ""),
+                                               barmode="overlay" if bd else "relative",
+                                               color_discrete_sequence=["#2C4A6E"] if not bd else None,
+                                               opacity=0.8)
+                            st.plotly_chart(styled_plotly(fig), use_container_width=True, theme=None,
+                                            key=f"cb_hist_{selected_name}_{x_col}_{breakdown}_{nbins}")
+                        except Exception as e:
+                            st.warning(f"Could not render chart: {e}")
+
+                # ── Scatter Plot ─────────────────────────────────────────────
+                elif chart_type == "Scatter Plot":
+                    if len(numeric_cols) < 2:
+                        st.warning("Need at least 2 numeric columns.")
+                    else:
+                        default_metric = smart_default_metric(numeric_cols)
+                        c1, c2, c3, c4 = st.columns(4)
+                        with c1:
+                            x_col = st.selectbox("X axis", numeric_cols, key=f"sc_x_{selected_name}")
+                        with c2:
+                            remaining = [c for c in numeric_cols if c != x_col]
+                            y_default = smart_default_metric(remaining) or remaining[0]
+                            y_col = st.selectbox("Y axis", remaining,
+                                                  index=remaining.index(y_default),
+                                                  key=f"sc_y_{selected_name}")
+                        with c3:
+                            color_col = st.selectbox("Color by (optional)", ["None"] + categorical_cols,
+                                                      key=f"sc_color_{selected_name}")
+                        with c4:
+                            size_col = st.selectbox("Size by (optional)", ["None"] + [c for c in numeric_cols if c not in [x_col, y_col]],
+                                                     key=f"sc_size_{selected_name}")
+                        try:
                             fig = px.scatter(df, x=x_col, y=y_col,
                                              color=None if color_col == "None" else color_col,
-                                             title=f"{y_col} vs {x_col}")
-                            st.plotly_chart(styled_plotly(fig), use_container_width=True, theme=None, key=f"cb_scatter_{selected_name}_{x_col}_{y_col}")
-                        else:
-                            st.warning("Need at least 2 numeric columns.")
+                                             size=None if size_col == "None" else size_col,
+                                             title=f"{y_col} vs {x_col}" + (f" by {color_col}" if color_col != "None" else ""),
+                                             hover_data=df.columns.tolist(),
+                                             opacity=0.7)
+                            st.plotly_chart(styled_plotly(fig), use_container_width=True, theme=None,
+                                            key=f"cb_scatter_{selected_name}_{x_col}_{y_col}_{color_col}_{size_col}")
+                        except Exception as e:
+                            st.warning(f"Could not render chart: {e}")
 
-                    elif chart_type == "Box Plot":
-                        if numeric_cols:
-                            with opts_col:
-                                y_col = st.selectbox("Numeric column", numeric_cols)
-                                x_col = st.selectbox("Group by", ["None"] + categorical_cols)
+                # ── Box Plot ─────────────────────────────────────────────────
+                elif chart_type == "Box Plot":
+                    if not numeric_cols:
+                        st.warning("No numeric columns available.")
+                    else:
+                        default_metric = smart_default_metric(numeric_cols)
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            y_default = default_metric or numeric_cols[0]
+                            y_col = st.selectbox("Metric", numeric_cols,
+                                                  index=numeric_cols.index(y_default),
+                                                  key=f"box_y_{selected_name}")
+                        with c2:
+                            x_col = st.selectbox("Group by (optional)", ["None"] + categorical_cols,
+                                                  key=f"box_x_{selected_name}")
+                        with c3:
+                            color_col = st.selectbox("Color by (optional)",
+                                                      ["None"] + [c for c in categorical_cols if c != (None if x_col == "None" else x_col)],
+                                                      key=f"box_color_{selected_name}")
+                        try:
                             fig = px.box(df, y=y_col,
                                          x=None if x_col == "None" else x_col,
-                                         color=None if x_col == "None" else x_col,
-                                         title=f"Box Plot: {y_col}")
-                            st.plotly_chart(styled_plotly(fig), use_container_width=True, theme=None, key=f"cb_box_{selected_name}_{y_col}_{x_col}")
-                        else:
-                            st.warning("No numeric columns.")
+                                         color=None if color_col == "None" else color_col,
+                                         title=f"{y_col}" + (f" by {x_col}" if x_col != "None" else ""),
+                                         points="outliers")
+                            st.plotly_chart(styled_plotly(fig), use_container_width=True, theme=None,
+                                            key=f"cb_box_{selected_name}_{y_col}_{x_col}_{color_col}")
+                        except Exception as e:
+                            st.warning(f"Could not render chart: {e}")
 
-                    elif chart_type == "Line Chart":
-                        if all_cols and numeric_cols:
-                            with opts_col:
-                                x_col = st.selectbox("X axis", all_cols)
-                                y_col = st.selectbox("Y axis", numeric_cols)
+                # ── Line Chart ───────────────────────────────────────────────
+                elif chart_type == "Line Chart":
+                    if not numeric_cols:
+                        st.warning("No numeric columns available.")
+                    else:
+                        default_metric = smart_default_metric(numeric_cols)
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            x_col = st.selectbox("X axis", all_cols, key=f"line_x_{selected_name}")
+                        with c2:
+                            y_default = default_metric or numeric_cols[0]
+                            y_col = st.selectbox("Y axis (metric)", numeric_cols,
+                                                  index=numeric_cols.index(y_default),
+                                                  key=f"line_y_{selected_name}")
+                        with c3:
+                            color_col = st.selectbox("Break down by (optional)", ["None"] + categorical_cols,
+                                                      key=f"line_color_{selected_name}")
+                        try:
                             temp_df = df.copy()
+                            bd = None if color_col == "None" else color_col
                             try:
                                 temp_df[x_col] = pd.to_datetime(temp_df[x_col])
                                 temp_df = temp_df.sort_values(x_col)
+                                if bd:
+                                    temp_df = temp_df.groupby([pd.Grouper(key=x_col, freq="ME"), bd])[y_col].sum().reset_index()
+                                else:
+                                    temp_df = temp_df.groupby(pd.Grouper(key=x_col, freq="ME"))[y_col].sum().reset_index()
                             except Exception:
-                                pass
-                            fig = px.line(temp_df, x=x_col, y=y_col,
-                                          title=f"{y_col} over {x_col}", markers=True, color_discrete_sequence=["#2C4A6E"])
-                            st.plotly_chart(styled_plotly(fig), use_container_width=True, theme=None, key=f"cb_line_{selected_name}_{x_col}_{y_col}")
-                        else:
-                            st.warning("Need at least 1 numeric column.")
+                                temp_df = temp_df.sort_values(x_col)
+                            fig = px.line(temp_df, x=x_col, y=y_col, color=bd,
+                                          title=f"{y_col} over {x_col}" + (f" by {bd}" if bd else ""),
+                                          markers=True,
+                                          color_discrete_sequence=["#2C4A6E"] if not bd else None)
+                            st.plotly_chart(styled_plotly(fig), use_container_width=True, theme=None,
+                                            key=f"cb_line_{selected_name}_{x_col}_{y_col}_{color_col}")
+                        except Exception as e:
+                            st.warning(f"Could not render chart: {e}")
 
-                    elif chart_type == "Correlation Heatmap":
-                        if len(numeric_cols) >= 2:
-                            with opts_col:
-                                sel = st.multiselect("Columns", numeric_cols, default=numeric_cols[:min(6, len(numeric_cols))])
-                            if len(sel) >= 2:
+                # ── Correlation Heatmap ──────────────────────────────────────
+                elif chart_type == "Correlation Heatmap":
+                    if len(numeric_cols) < 2:
+                        st.warning("Need at least 2 numeric columns.")
+                    else:
+                        sel = st.multiselect("Select columns to include",
+                                             numeric_cols,
+                                             default=numeric_cols[:min(8, len(numeric_cols))],
+                                             key=f"heatmap_sel_{selected_name}")
+                        if len(sel) >= 2:
+                            try:
                                 corr = df[sel].corr()
-                                fig = px.imshow(corr, text_auto=True, title="Correlation Heatmap",
+                                fig = px.imshow(corr, text_auto=".2f", title="Correlation Heatmap",
                                                 aspect="auto", color_continuous_scale="RdBu_r", zmin=-1, zmax=1)
-                                st.plotly_chart(styled_plotly(fig), use_container_width=True, theme=None, key="cb_heatmap_{}_{}".format(selected_name, "_".join(sel)))
-                            else:
-                                st.warning("Select at least 2 columns.")
+                                st.plotly_chart(styled_plotly(fig), use_container_width=True, theme=None,
+                                                key="cb_heatmap_{}_{}".format(selected_name, "_".join(sel)))
+                            except Exception as e:
+                                st.warning(f"Could not render chart: {e}")
                         else:
-                            st.warning("Need at least 2 numeric columns.")
+                            st.warning("Select at least 2 columns.")
 
     # ── Downloads ──────────────────────────────────────────────────────────────
     with tab_dl:
